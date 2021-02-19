@@ -1,7 +1,7 @@
 import resolve from "./resolve"
 
 exports.onCreateWebpackConfig = (
-  { actions, stage, loaders },
+  { actions, stage, rules, plugins, loaders },
   {
     cssLoaderOptions = {},
     postCssPlugins,
@@ -9,16 +9,19 @@ exports.onCreateWebpackConfig = (
     sassRuleTest,
     sassRuleModulesTest,
     sassOptions = {},
-    // eslint-disable-next-line no-unused-vars
-    plugins,
     ...sassLoaderOptions
   }
 ) => {
   const { setWebpackConfig } = actions
+  const PRODUCTION = stage !== `develop`
+  const isSSR = stage.includes(`html`)
+
+  delete sassLoaderOptions.plugins
 
   const sassLoader = {
     loader: resolve(`sass-loader`),
     options: {
+      sourceMap: useResolveUrlLoader ? true : !PRODUCTION,
       sassOptions,
       ...sassLoaderOptions,
     },
@@ -26,23 +29,25 @@ exports.onCreateWebpackConfig = (
 
   const sassRule = {
     test: sassRuleTest || /\.s(a|c)ss$/,
-    use: [
-      loaders.miniCssExtract(),
-      loaders.css({ importLoaders: 2, ...cssLoaderOptions }),
-      loaders.postcss({ plugins: postCssPlugins }),
-      sassLoader,
-    ],
+    use: isSSR
+      ? [loaders.null()]
+      : [
+          loaders.miniCssExtract(),
+          loaders.css({ importLoaders: 2, ...cssLoaderOptions }),
+          loaders.postcss({ plugins: postCssPlugins }),
+          sassLoader,
+        ],
   }
   const sassRuleModules = {
     test: sassRuleModulesTest || /\.module\.s(a|c)ss$/,
     use: [
-      loaders.miniCssExtract(),
+      !isSSR && loaders.miniCssExtract({ hmr: false }),
       loaders.css({ importLoaders: 2, ...cssLoaderOptions, modules: true }),
       loaders.postcss({ plugins: postCssPlugins }),
       sassLoader,
     ].filter(Boolean),
   }
-  if (useResolveUrlLoader) {
+  if (useResolveUrlLoader && !isSSR) {
     sassRule.use.splice(-1, 0, {
       loader: `resolve-url-loader`,
       options: useResolveUrlLoader.options ? useResolveUrlLoader.options : {},
